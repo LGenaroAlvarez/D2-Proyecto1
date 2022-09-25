@@ -32,6 +32,8 @@
 #include <stdint.h>
 #include "osc_config.h"
 #include "tmr0_config.h"
+#include "USART.h"
+#include "LCD4b.h"
 
 #define _XTAL_FREQ 1000000
 
@@ -43,6 +45,13 @@ uint8_t cont = 0;                                                              /
 uint8_t milis = 0;
 uint8_t pulse = 0;
 uint8_t spst = 0;
+uint8_t HS_flag = 0;
+uint8_t sensor_flag = 0;
+uint8_t spst_flag = 0;
+char HS_flag_str[10];
+char spst_str[10];
+uint8_t frerr = 0;
+uint8_t overr = 0;
 
 // PROTOTIPO DE FUNCIONES
 void setup(void);
@@ -50,6 +59,8 @@ void stepSet(uint8_t push, uint8_t set_pulse);
 
 //INTERRUPCIONES
 void __interrupt() isr(void){
+    
+    // INTERRUPCION DEL TMR0 PARA GENERAR PULSOS DE 20mS
     if (T0IF){
         milis++;
         if (milis == 4){
@@ -58,14 +69,34 @@ void __interrupt() isr(void){
         }
         tmr0Reset();
     }
-    if (RBIF){
-        if (!PORTBbits.RB0){
-            spst = 1;
+    
+    // INTERRUPCION PARA RECEPCION DE VALORES DE LOS SENSORES
+    if (RCIF){
+        frerr = RCSTAbits.FERR;
+        overr = RCSTAbits.OERR;
+        sensor_flag = RCREG;
+        sprintf(spst_str, "%d", sensor_flag);
+        RCREG = 0;
+        if (sensor_flag == 65){
+            frerr = RCSTAbits.FERR;
+            overr = RCSTAbits.OERR;
+            PORTAbits.RA0 = frerr;
+            PORTAbits.RA1 = overr;
+            HS_flag = RCREG;
+            sprintf(HS_flag_str, "%d", HS_flag);
+            RCREG = 0;
         }
-        else {
-            spst = 0;
-        }
-        INTCONbits.RBIF = 0;
+//        frerr = RCSTAbits.FERR;
+//        overr = RCSTAbits.OERR;
+//        sensor_flag = RCREG;
+//        RCREG = 0;
+//        if (sensor_flag == 66){
+//            frerr = RCSTAbits.FERR;
+//            overr = RCSTAbits.OERR;
+//            spst_flag = RCREG;
+//            sprintf(spst_str, "%d", spst_flag);
+//            RCREG = 0;
+//        }
     }
 }
 
@@ -73,8 +104,21 @@ void main(void) {
     setup();
     initOscFreq(Fosc);
     initTmr0(PS_val);
+    usartInitTransmit();
+    Lcd_Init();
+    
     while(1){
-        stepSet(spst, pulse);
+//        stepSet(spst, pulse);
+        Lcd_Set_Cursor(0,9);
+        Lcd_Write_String(spst_str);
+        if (HS_flag == 48){
+            Lcd_Set_Cursor(0,2);
+            Lcd_Write_String(HS_flag_str);
+        }        
+        else if (HS_flag == 49){
+            Lcd_Set_Cursor(0,2);
+            Lcd_Write_String(HS_flag_str);
+        }               
     }
     return;
 }
@@ -84,22 +128,15 @@ void setup(void){
     ANSEL = 0;
     ANSELH = 0;
     
-    // CONFIGURACION DE PUERTO B PARA PUSHBUTTON
-    TRISB = 0b00000001;
-    OPTION_REGbits.nRBPU = 0;                                                   // HABILITAR WEAK PULLUP EN PUERTO B
-    WPUB = 0b00000001;                                                          // HABILITAR RESISTENCIA EN RB0 
-    IOCBbits.IOCB0 = 1;                                                         // HABILITAR INTERRUPCION EN CAMBIO PARA RB0
-    
-    TRISC = 0;
-    TRISD = 0;
+    TRISA = 0;
+    TRISB = 0;
+    PORTA = 0;
     PORTB = 0;
-    PORTC = 0;
     PORTD = 0;
     
     //CONFIG DE INTERRUPCIONES
     INTCONbits.GIE = 1;
-    INTCONbits.RBIE = 1;
-    INTCONbits.RBIF = 0;
+    INTCONbits.PEIE = 1;
 }
 
 void stepSet(uint8_t push, uint8_t set_pulse){

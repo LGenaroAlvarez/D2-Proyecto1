@@ -6,6 +6,8 @@
                    projectFiles="true">
       <itemPath>tmr0_config.h</itemPath>
       <itemPath>osc_config.h</itemPath>
+      <itemPath>USART.h</itemPath>
+      <itemPath>LCD4b.h</itemPath>
     </logicalFolder>
     <logicalFolder name="LinkerScript"
                    displayName="Linker Files"
@@ -17,6 +19,8 @@
       <itemPath>osc_config.c</itemPath>
       <itemPath>tmr0_config.c</itemPath>
       <itemPath>proyecto-main.c</itemPath>
+      <itemPath>USART.c</itemPath>
+      <itemPath>LCD4b.c</itemPath>
     </logicalFolder>
     <logicalFolder name="ExternalFiles"
                    displayName="Important Files"

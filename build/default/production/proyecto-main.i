@@ -1,4 +1,4 @@
-# 1 "usart-main.c"
+# 1 "proyecto-main.c"
 # 1 "<built-in>" 1
 # 1 "<built-in>" 3
 # 288 "<built-in>" 3
@@ -6,8 +6,8 @@
 # 1 "<built-in>" 2
 # 1 "C:/Program Files/Microchip/MPLABX/v6.00/packs/Microchip/PIC16Fxxx_DFP/1.3.42/xc8\\pic\\include\\language_support.h" 1 3
 # 2 "<built-in>" 2
-# 1 "usart-main.c" 2
-# 12 "usart-main.c"
+# 1 "proyecto-main.c" 2
+# 12 "proyecto-main.c"
 #pragma config FOSC = INTRC_NOCLKOUT
 #pragma config WDTE = OFF
 #pragma config PWRTE = OFF
@@ -2644,7 +2644,7 @@ extern __bank0 unsigned char __resetbits;
 extern __bank0 __bit __powerdown;
 extern __bank0 __bit __timeout;
 # 29 "C:/Program Files/Microchip/MPLABX/v6.00/packs/Microchip/PIC16Fxxx_DFP/1.3.42/xc8\\pic\\include\\xc.h" 2 3
-# 30 "usart-main.c" 2
+# 30 "proyecto-main.c" 2
 
 # 1 "C:\\Program Files\\Microchip\\xc8\\v2.35\\pic\\include\\c90\\stdio.h" 1 3
 
@@ -2743,10 +2743,10 @@ extern int vsscanf(const char *, const char *, va_list) __attribute__((unsupport
 #pragma printf_check(sprintf) const
 extern int sprintf(char *, const char *, ...);
 extern int printf(const char *, ...);
-# 31 "usart-main.c" 2
+# 31 "proyecto-main.c" 2
 
 # 1 "C:\\Program Files\\Microchip\\xc8\\v2.35\\pic\\include\\c90\\stdint.h" 1 3
-# 32 "usart-main.c" 2
+# 32 "proyecto-main.c" 2
 
 # 1 "./osc_config.h" 1
 # 15 "./osc_config.h"
@@ -2756,7 +2756,7 @@ extern int printf(const char *, ...);
 
 
 void initOscFreq (uint8_t freq);
-# 33 "usart-main.c" 2
+# 33 "proyecto-main.c" 2
 
 # 1 "./tmr0_config.h" 1
 # 14 "./tmr0_config.h"
@@ -2770,7 +2770,41 @@ void initOscFreq (uint8_t freq);
 
 void initTmr0 (int prescaler);
 void tmr0Reset(void);
-# 34 "usart-main.c" 2
+# 34 "proyecto-main.c" 2
+
+# 1 "./USART.h" 1
+# 15 "./USART.h"
+# 1 "C:\\Program Files\\Microchip\\xc8\\v2.35\\pic\\include\\c90\\stdint.h" 1 3
+# 15 "./USART.h" 2
+
+
+
+
+void usartInitTransmit(void);
+
+void usartDataWrite(uint8_t msg);
+# 35 "proyecto-main.c" 2
+
+# 1 "./LCD4b.h" 1
+# 46 "./LCD4b.h"
+void Lcd_Port(char a);
+
+void Lcd_Cmd(char a);
+
+void Lcd_Clear(void);
+
+void Lcd_Set_Cursor(char a, char b);
+
+void Lcd_Init(void);
+
+void Lcd_Write_Char(char a);
+
+void Lcd_Write_String(char *a);
+
+void Lcd_Shift_Right(void);
+
+void Lcd_Shift_Left(void);
+# 36 "proyecto-main.c" 2
 
 
 
@@ -2783,6 +2817,13 @@ uint8_t cont = 0;
 uint8_t milis = 0;
 uint8_t pulse = 0;
 uint8_t spst = 0;
+uint8_t HS_flag = 0;
+uint8_t sensor_flag = 0;
+uint8_t spst_flag = 0;
+char HS_flag_str[10];
+char spst_str[10];
+uint8_t frerr = 0;
+uint8_t overr = 0;
 
 
 void setup(void);
@@ -2790,6 +2831,8 @@ void stepSet(uint8_t push, uint8_t set_pulse);
 
 
 void __attribute__((picinterrupt(("")))) isr(void){
+
+
     if (T0IF){
         milis++;
         if (milis == 4){
@@ -2798,14 +2841,24 @@ void __attribute__((picinterrupt(("")))) isr(void){
         }
         tmr0Reset();
     }
-    if (RBIF){
-        if (!PORTBbits.RB0){
-            spst = 1;
+
+
+    if (RCIF){
+        frerr = RCSTAbits.FERR;
+        overr = RCSTAbits.OERR;
+        sensor_flag = RCREG;
+        sprintf(spst_str, "%d", sensor_flag);
+        RCREG = 0;
+        if (sensor_flag == 65){
+            frerr = RCSTAbits.FERR;
+            overr = RCSTAbits.OERR;
+            PORTAbits.RA0 = frerr;
+            PORTAbits.RA1 = overr;
+            HS_flag = RCREG;
+            sprintf(HS_flag_str, "%d", HS_flag);
+            RCREG = 0;
         }
-        else {
-            spst = 0;
-        }
-        INTCONbits.RBIF = 0;
+# 100 "proyecto-main.c"
     }
 }
 
@@ -2813,8 +2866,21 @@ void main(void) {
     setup();
     initOscFreq(Fosc);
     initTmr0(PS_val);
+    usartInitTransmit();
+    Lcd_Init();
+
     while(1){
-        stepSet(spst, pulse);
+
+        Lcd_Set_Cursor(0,9);
+        Lcd_Write_String(spst_str);
+        if (HS_flag == 48){
+            Lcd_Set_Cursor(0,2);
+            Lcd_Write_String(HS_flag_str);
+        }
+        else if (HS_flag == 49){
+            Lcd_Set_Cursor(0,2);
+            Lcd_Write_String(HS_flag_str);
+        }
     }
     return;
 }
@@ -2824,22 +2890,15 @@ void setup(void){
     ANSEL = 0;
     ANSELH = 0;
 
-
-    TRISB = 0b00000001;
-    OPTION_REGbits.nRBPU = 0;
-    WPUB = 0b00000001;
-    IOCBbits.IOCB0 = 1;
-
-    TRISC = 0;
-    TRISD = 0;
+    TRISA = 0;
+    TRISB = 0;
+    PORTA = 0;
     PORTB = 0;
-    PORTC = 0;
     PORTD = 0;
 
 
     INTCONbits.GIE = 1;
-    INTCONbits.RBIE = 1;
-    INTCONbits.RBIF = 0;
+    INTCONbits.PEIE = 1;
 }
 
 void stepSet(uint8_t push, uint8_t set_pulse){
