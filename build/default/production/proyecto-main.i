@@ -2785,27 +2785,6 @@ void usartInitTransmit(void);
 void usartDataWrite(uint8_t msg);
 # 35 "proyecto-main.c" 2
 
-# 1 "./LCD4b.h" 1
-# 46 "./LCD4b.h"
-void Lcd_Port(char a);
-
-void Lcd_Cmd(char a);
-
-void Lcd_Clear(void);
-
-void Lcd_Set_Cursor(char a, char b);
-
-void Lcd_Init(void);
-
-void Lcd_Write_Char(char a);
-
-void Lcd_Write_String(char *a);
-
-void Lcd_Shift_Right(void);
-
-void Lcd_Shift_Left(void);
-# 36 "proyecto-main.c" 2
-
 
 
 
@@ -2814,30 +2793,44 @@ void Lcd_Shift_Left(void);
 uint8_t Fosc = 1;
 int PS_val = 16;
 uint8_t cont = 0;
-uint8_t milis = 0;
 uint8_t pulse = 0;
 uint8_t spst = 0;
 uint8_t HS_flag = 0;
 uint8_t sensor_flag = 0;
 uint8_t spst_flag = 0;
-char HS_flag_str[10];
-char spst_str[10];
+uint8_t flagdc =0;
 uint8_t frerr = 0;
 uint8_t overr = 0;
 
 
 void setup(void);
-void stepSet(uint8_t push, uint8_t set_pulse);
+void servoRotate0(void);
+void servoRotate180(void);
 
 
 void __attribute__((picinterrupt(("")))) isr(void){
 
 
     if (T0IF){
-        milis++;
-        if (milis == 4){
-            pulse = !pulse;
-            milis = 0;
+        cont++;
+        if (spst_flag == 51){
+            if (cont == 1){
+                PORTB = 0b00000010;
+            }
+            else if(cont == 2){
+                PORTB = 0b00000100;
+            }
+            else if(cont == 3){
+                PORTB = 0b00001000;
+
+            }
+            else if(cont == 4){
+                PORTB = 0b00010000;
+                cont = 0;
+            }
+        }
+        if (cont == 4){
+            cont = 0;
         }
         tmr0Reset();
     }
@@ -2847,18 +2840,19 @@ void __attribute__((picinterrupt(("")))) isr(void){
         frerr = RCSTAbits.FERR;
         overr = RCSTAbits.OERR;
         sensor_flag = RCREG;
-        sprintf(spst_str, "%d", sensor_flag);
         RCREG = 0;
-        if (sensor_flag == 65){
-            frerr = RCSTAbits.FERR;
-            overr = RCSTAbits.OERR;
-            PORTAbits.RA0 = frerr;
-            PORTAbits.RA1 = overr;
-            HS_flag = RCREG;
-            sprintf(HS_flag_str, "%d", HS_flag);
-            RCREG = 0;
+        if (sensor_flag <= 49){
+            HS_flag = sensor_flag;
         }
-# 100 "proyecto-main.c"
+        else if (sensor_flag >= 50 && sensor_flag < 52){
+            spst_flag = sensor_flag;
+        }
+        else if (sensor_flag >= 52 && sensor_flag < 54){
+            flagdc = sensor_flag;
+        }
+        else {
+            sensor_flag = 0;
+        }
     }
 }
 
@@ -2867,19 +2861,21 @@ void main(void) {
     initOscFreq(Fosc);
     initTmr0(PS_val);
     usartInitTransmit();
-    Lcd_Init();
 
     while(1){
-
-        Lcd_Set_Cursor(0,9);
-        Lcd_Write_String(spst_str);
         if (HS_flag == 48){
-            Lcd_Set_Cursor(0,2);
-            Lcd_Write_String(HS_flag_str);
+            servoRotate0();
         }
         else if (HS_flag == 49){
-            Lcd_Set_Cursor(0,2);
-            Lcd_Write_String(HS_flag_str);
+            servoRotate180();
+        }
+        if (flagdc == 52){
+            PORTDbits.RD1 = 0;
+
+        }
+        else if (flagdc == 53){
+            PORTDbits.RD1 = 1;
+
         }
     }
     return;
@@ -2892,6 +2888,7 @@ void setup(void){
 
     TRISA = 0;
     TRISB = 0;
+    TRISD = 0;
     PORTA = 0;
     PORTB = 0;
     PORTD = 0;
@@ -2901,11 +2898,27 @@ void setup(void){
     INTCONbits.PEIE = 1;
 }
 
-void stepSet(uint8_t push, uint8_t set_pulse){
-    if (push == 1){
-        PORTCbits.RC0 = set_pulse;
-    }
-    else {
-        PORTCbits.RC0 = 0;
-    }
+void servoRotate0(void)
+{
+  unsigned int i;
+  for(i=0;i<50;i++)
+  {
+    RD2 = 1;
+    _delay((unsigned long)((500)*(1000000/4000000.0)));
+    RD2 = 0;
+    _delay((unsigned long)((19500)*(1000000/4000000.0)));
+  }
+}
+
+
+void servoRotate180(void)
+{
+  unsigned int i;
+  for(i=0;i<50;i++)
+  {
+    RD2 = 1;
+    _delay((unsigned long)((2200)*(1000000/4000000.0)));
+    RD2 = 0;
+    _delay((unsigned long)((17800)*(1000000/4000000.0)));
+  }
 }

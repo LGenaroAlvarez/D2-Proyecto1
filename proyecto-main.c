@@ -1,7 +1,7 @@
 /*
- * File:   usart-main.c
- * Author: Luis Genaro Alvarez Sulecio
- * Description: 
+ * File:   proyecto-main.c
+ * Authors: Luis Genaro Alvarez Sulecio y Luis Alejandro Dardon Rivera
+ * Description: Codigo para el control de motores segun datos recibidos del PIC principal mediante comunicacion USART.
  * Created on September 13, 2022, 10:21 AM
  */
 // PIC16F887 Configuration Bit Settings
@@ -25,101 +25,112 @@
 #pragma config WRT = OFF        // Flash Program Memory Self Write Enable bits (Write protection off)
 
 // #pragma config statements should precede project file includes.
-// Use project enums instead of #define for ON and OFF.
 
 #include <xc.h>
 #include <stdio.h>
 #include <stdint.h>
+/*LIBRERIAS INCLUIDAS*/
 #include "osc_config.h"
 #include "tmr0_config.h"
 #include "USART.h"
-#include "LCD4b.h"
+/*===================*/
 
 #define _XTAL_FREQ 1000000
 
 
 // VARIABLES GLOBALES
 uint8_t Fosc = 1;                                                               // SELECCIONAR FRECUENCIA DE OSCILADOR
-int PS_val = 16;                                                            // VALOR DEL PRESCALER DEL TMR0
-uint8_t cont = 0;                                                              // VALOR DEL CONTADOR DEL TMR0
-uint8_t milis = 0;
-uint8_t pulse = 0;
-uint8_t spst = 0;
-uint8_t HS_flag = 0;
-uint8_t sensor_flag = 0;
-uint8_t spst_flag = 0;
-char HS_flag_str[10];
-char spst_str[10];
+int PS_val = 16;                                                                // VALOR DEL PRESCALER DEL TMR0
+uint8_t cont = 0;                                                               // VALOR DEL CONTADOR DEL TMR0
+
+// BANDERAS DE RECEPCION DE DATOS
+uint8_t sensor_flag = 0;                                                        // DATOS RECIBIDOS POR COMUNICACION USART
+uint8_t HS_flag = 0;                                                            // DATOS RECIBIDOS DEL SENSOR DE HUMEDAD
+uint8_t spst_flag = 0;                                                          // DATOS RECIBIDOS DEL PUSHBUTTON
+uint8_t flagdc =0;                                                              // DATOS RECIBIDOS DEL SENSOR DE TEMPERATURA (PARA EL MOTOR DC)
+
+// VARIABLES PARA LECTURA USART
 uint8_t frerr = 0;
 uint8_t overr = 0;
 
 // PROTOTIPO DE FUNCIONES
-void setup(void);
-void stepSet(uint8_t push, uint8_t set_pulse);
+void setup(void);                                                               // FUNCION PARA CONFIGURACIONES I/O E INTERRUPCIONES
+void servoRotate0(void);                                                        // FUNCION PARA GIRAR SERVO A 0°
+void servoRotate180(void);                                                      // FUNCION PARA GIRAR SERVO A 180°
 
 //INTERRUPCIONES
 void __interrupt() isr(void){
     
     // INTERRUPCION DEL TMR0 PARA GENERAR PULSOS DE 20mS
     if (T0IF){
-        milis++;
-        if (milis == 4){
-            pulse = !pulse;
-            milis = 0;            
+        cont++;                                                                 // CONTEO CON TIMER0
+        if (spst_flag == 51){                                                   // REVISAR SI EL PUSHBUTTON DEL MOTOR STEPPER HA SIDO PRESIONADO
+            if (cont == 1){                                                     // SI LA CUENTA ES IGUAL A 1
+                PORTB = 0b00000010;                                             // ENCENDER EL PRIMER PIN DEL MOTOR STEPPER (RB1)
+            }
+            else if(cont == 2){                                                 // SI LA CUENTA ES IGUAL A 2
+                PORTB = 0b00000100;                                             // ENCENDER EL PRIMER PIN DEL MOTOR STEPPER (RB2)
+            }
+            else if(cont == 3){                                                 // SI LA CUENTA ES IGUAL A 3
+                PORTB = 0b00001000;                                             // ENCENDER EL PRIMER PIN DEL MOTOR STEPPER (RB3)
+
+            }
+            else if(cont == 4){                                                 // SI LA CUENTA ES IGUAL A 4
+                PORTB = 0b00010000;                                             // ENCENDER EL PRIMER PIN DEL MOTOR STEPPER (RB4)
+                cont = 0;                                                       // REINICIO DE LA CUENTA
+            }
         }
-        tmr0Reset();
+        if (cont == 4){
+            cont = 0;
+        }
+        tmr0Reset();                                                            // REINICIO DEL TMR0
     }
     
     // INTERRUPCION PARA RECEPCION DE VALORES DE LOS SENSORES
     if (RCIF){
-        frerr = RCSTAbits.FERR;
-        overr = RCSTAbits.OERR;
-        sensor_flag = RCREG;
-        sprintf(spst_str, "%d", sensor_flag);
-        RCREG = 0;
-        if (sensor_flag == 65){
-            frerr = RCSTAbits.FERR;
-            overr = RCSTAbits.OERR;
-            PORTAbits.RA0 = frerr;
-            PORTAbits.RA1 = overr;
-            HS_flag = RCREG;
-            sprintf(HS_flag_str, "%d", HS_flag);
-            RCREG = 0;
+        frerr = RCSTAbits.FERR;                                                 // REVISAR BANDERAS DE ERROR
+        overr = RCSTAbits.OERR;                                                 //      |       |       |
+        sensor_flag = RCREG;                                                    // LECTURA DE LOS DATOS RECIBIDOS POR TRANSMISION USART
+        RCREG = 0;                                                              // LIMPIAR REGISTRO DE TRANSMISION DE DATOS USART
+        if (sensor_flag <= 49){                                                 // REVISAR SI LOS DATOS RECIBIDOS CORRESPONDEN AL SENSOR DE HUMEDAD
+            HS_flag = sensor_flag;                                              // CARGAR VALOR RECIBIDO A LA BANDERA DEL SENSOR DE HUMEDAD
         }
-//        frerr = RCSTAbits.FERR;
-//        overr = RCSTAbits.OERR;
-//        sensor_flag = RCREG;
-//        RCREG = 0;
-//        if (sensor_flag == 66){
-//            frerr = RCSTAbits.FERR;
-//            overr = RCSTAbits.OERR;
-//            spst_flag = RCREG;
-//            sprintf(spst_str, "%d", spst_flag);
-//            RCREG = 0;
-//        }
+        else if (sensor_flag >= 50 && sensor_flag < 52){                        // REVISAR SI LOS DATOS RECIBIDOS CORRESPONDEN AL PUSHBUTTON
+            spst_flag = sensor_flag;                                            // CARGAR VALOR RECIBIDO A LA BANDERA DEL PUSHBUTTON
+        }
+        else if (sensor_flag >= 52 && sensor_flag < 54){                        // REVISAR SI LOS DATOS RECIBIDOS CORRESPONDEN AL SENSOR DE HUMEDAD
+            flagdc = sensor_flag;                                               // CARGAR VALOR RECIBIDO A LA BANDERA DEL MOTOR DC
+        }
+        else {
+            sensor_flag = 0;                                                    // LIMPIAR BANDERA DE RECEPCION DE DATOS
+        }
     }
 }
 
 void main(void) {
-    setup();
-    initOscFreq(Fosc);
-    initTmr0(PS_val);
-    usartInitTransmit();
-    Lcd_Init();
+    setup();                                                                    // INICIALIZAR CONFIGURACIONES I/O E INTERRUPCIONES
+    initOscFreq(Fosc);                                                          // INICIALIZAR CONFIGURACIONES DEL OSCILADOR A 1MHz
+    initTmr0(PS_val);                                                           // INICIALIZAR CONFIGURACIONES DEL TMR0
+    usartInitTransmit();                                                        // INICIALIZAR CONFIGURACIONES DE LA COMUNICACION USART
     
+    /*==========================================================================
+     =================================LOOP======================================
+     =========================================================================*/
     while(1){
-//        stepSet(spst, pulse);
-        Lcd_Set_Cursor(0,9);
-        Lcd_Write_String(spst_str);
-        if (HS_flag == 48){
-            Lcd_Set_Cursor(0,2);
-            Lcd_Write_String(HS_flag_str);
-        }        
-        else if (HS_flag == 49){
-            Lcd_Set_Cursor(0,2);
-            Lcd_Write_String(HS_flag_str);
-        }               
+        if (HS_flag == 48){                                                     // SI LA BANDERA DEL SENSOR DE HUMEDAD ES IGUAL A 0
+            servoRotate0();                                                     // MANTENER EL SERVO EN 0 GRADOS
+        }
+        else if (HS_flag == 49){                                                // SI LA BANDERA DEL SENSOR DE HUMEDAD ES IGUAL A 1
+            servoRotate180();                                                   // MANTENER EL SERVO EN 180 GRADOS
+        }
+        if (flagdc == 52){                                                      // SI LA BANDERA DEL SENSOR DE TEMPERATURA ES IGUAL A 0
+            PORTDbits.RD1 = 0;                                                  // MANTENER EL PIN RD1 EN 0 (MOTOR DC APAGADO)          
+        }
+        else if (flagdc == 53){                                                 // SI LA BANDERA DEL SENSOR DE TEMPERATURA ES IGUAL A 1
+            PORTDbits.RD1 = 1;                                                  // MANTENER EL PIN RD1 EN 1 (MOTOR DC ENCENDIDO)
+        }
     }
+    /*========================================================================*/
     return;
 }
 
@@ -128,8 +139,12 @@ void setup(void){
     ANSEL = 0;
     ANSELH = 0;
     
+    // CONFIGURACION DE ENTRADAS Y SALIDAS
     TRISA = 0;
     TRISB = 0;
+    TRISD = 0;
+    
+    // LIMPIEZA DE PUERTOS
     PORTA = 0;
     PORTB = 0;
     PORTD = 0;
@@ -139,11 +154,28 @@ void setup(void){
     INTCONbits.PEIE = 1;
 }
 
-void stepSet(uint8_t push, uint8_t set_pulse){
-    if (push == 1){
-        PORTCbits.RC0 = set_pulse;
-    }
-    else {
-        PORTCbits.RC0 = 0;
-    }
+// FUNCION PARA GIRAR SERVO A 0 GRADOS
+void servoRotate0(void)
+{
+  unsigned int i;
+  for(i=0;i<50;i++)
+  {
+    RD2 = 1;
+    __delay_us(500);
+    RD2 = 0;
+    __delay_us(19500);
+  }
+}
+
+// FUNCION PARA GIRAR SERVO A 180 GRADOS
+void servoRotate180(void)
+{
+  unsigned int i;
+  for(i=0;i<50;i++)
+  {
+    RD2 = 1;
+    __delay_us(2200);
+    RD2 = 0;
+    __delay_us(17800);
+  }
 }
